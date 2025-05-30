@@ -1,7 +1,10 @@
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import filedialog, messagebox
+from datetime import datetime
+import re
+from bs4 import BeautifulSoup
 
-# Updated replacement keys from your latest template
+# List of placeholders and GUI labels
 REPLACEMENTS = [
     ("Page Title", "【REPLACE: Page Title】"),
     ("Meta Description", "【REPLACE: Meta Description】"),
@@ -22,32 +25,64 @@ REPLACEMENTS = [
     ("First Question", "【REPLACE: First Question】"),
     ("Option 1", "【REPLACE: Option 1】"),
     ("Option 2", "【REPLACE: Option 2】"),
-    ("Second Question", "【REPLACE: Second Question】"),
+    ("Second Question", "【REPLACE: Second Question】")
 ]
 
 entries = {}
 
 def generate_html():
     try:
-        with open("template.html", "r", encoding="utf-8") as f:
-            html = f.read()
+        template_file = "template.html"
+        with open(template_file, "r", encoding="utf-8") as f:
+            template_html = f.read()
 
+        # Get replacement values from GUI
         for label, placeholder in REPLACEMENTS:
             widget = entries[label]
             value = widget.get() if isinstance(widget, tk.Entry) else widget.get("1.0", tk.END).strip()
-            html = html.replace(placeholder, value)
+            template_html = template_html.replace(placeholder, value)
 
-        with open("output.html", "w", encoding="utf-8") as f:
-            f.write(html)
+        # Ask user for second HTML file
+        second_file_path = filedialog.askopenfilename(
+            title="Select the 2nd HTML file",
+            filetypes=[("HTML files", "*.html"), ("All files", "*.*")]
+        )
+        if not second_file_path:
+            messagebox.showwarning("キャンセル", "2つ目のHTMLファイルが選択されていません。")
+            return
 
-        messagebox.showinfo("成功", "output.html が正常に生成されました！")
+        with open(second_file_path, "r", encoding="utf-8") as f:
+            second_html = f.read()
+
+        second_soup = BeautifulSoup(second_html, "html.parser")
+        new_body_content = "".join(str(tag) for tag in second_soup.body.contents if tag.name != "script")
+        new_script_tags = second_soup.find_all("script")
+
+        # Replace the entire <section id="userSurvey-content">...</section>
+        template_soup = BeautifulSoup(template_html, "html.parser")
+        old_section = template_soup.find("section", id="userSurvey-content")
+        if old_section:
+            new_section = BeautifulSoup(new_body_content, "html.parser")
+            old_section.replace_with(new_section)
+
+        # Append script tags to body
+        for script in new_script_tags:
+            template_soup.body.append(script)
+
+        # Save with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_file = f"output_{timestamp}.html"
+        with open(output_file, "w", encoding="utf-8") as f:
+            f.write(str(template_soup))
+
+        messagebox.showinfo("成功", f"{output_file} を生成しました。")
 
     except Exception as e:
         messagebox.showerror("エラー", str(e))
 
-# GUI Setup
+# GUI setup
 root = tk.Tk()
-root.title("HTMLテンプレート自動生成ツール")
+root.title("HTMLテンプレート生成ツール")
 
 canvas = tk.Canvas(root)
 scrollbar = tk.Scrollbar(root, orient="vertical", command=canvas.yview)
@@ -60,21 +95,19 @@ canvas.create_window((0, 0), window=frame, anchor="nw")
 
 def on_frame_configure(event):
     canvas.configure(scrollregion=canvas.bbox("all"))
-
 frame.bind("<Configure>", on_frame_configure)
 
-# Dynamically create labels and input fields
-for label_text, _ in REPLACEMENTS:
-    tk.Label(frame, text=label_text, font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=(10, 0))
-
-    if "Description" in label_text or "Question" in label_text or "Head Line" in label_text:
+# Create input fields
+for label, _ in REPLACEMENTS:
+    tk.Label(frame, text=label, font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=(10, 0))
+    if "Description" in label or "Question" in label or "Head Line" in label:
         widget = tk.Text(frame, height=3, width=70)
     else:
         widget = tk.Entry(frame, width=70)
-
     widget.pack(padx=10)
-    entries[label_text] = widget
+    entries[label] = widget
 
+# Button to generate
 tk.Button(frame, text="生成 (Generate HTML)", command=generate_html, bg="lightblue").pack(pady=20)
 
 root.mainloop()
