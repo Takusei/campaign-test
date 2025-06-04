@@ -1,113 +1,80 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox
-from datetime import datetime
-import re
 from bs4 import BeautifulSoup
+import datetime
+import os
 
-# List of placeholders and GUI labels
-REPLACEMENTS = [
-    ("Page Title", "【REPLACE: Page Title】"),
-    ("Meta Description", "【REPLACE: Meta Description】"),
-    ("OG Description", "【REPLACE: OG Description】"),
-    ("Head Line1", "【REPLACE: Head Line1】"),
-    ("Head Line2", "【REPLACE: Head Line2】"),
-    ("Head Line3", "【REPLACE: Head Line3】"),
-    ("Deadline year", "【REPLACE: Deadline year】"),
-    ("Deadline month", "【REPLACE: Deadline month】"),
-    ("Deadline day", "【REPLACE: Deadline day】"),
-    ("Deadline weekday", "【REPLACE: Deadline weekday】"),
-    ("Deliver date", "【REPLACE: Deliver date】"),
-    ("Extract year", "【REPLACE: Extract year】"),
-    ("Extract month", "【REPLACE: Extract month】"),
-    ("Extract day", "【REPLACE: Extract day】"),
-    ("Extract weekday", "【REPLACE: Extract weekday】"),
-    ("Form Submission URL", "【REPLACE: Form Submission URL】"),
-    ("First Question", "【REPLACE: First Question】"),
-    ("Option 1", "【REPLACE: Option 1】"),
-    ("Option 2", "【REPLACE: Option 2】"),
-    ("Second Question", "【REPLACE: Second Question】")
-]
+class HTMLGeneratorApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("HTML Generator")
+        self.entries = {}
 
-entries = {}
+        self.placeholders = [
+            "Page Title", "Canonical URL", "Meta Description", "OG Description",
+            "Head Line1", "Head Line2", "Head Line3",
+            "Deadline year", "Deadline month", "Deadline day", "Deadline weekday",
+            "Deliver date", "Extract year", "Extract month", "Extract day", "Extract weekday",
+            "Form Submission URL"
+        ]
 
-def generate_html():
-    try:
-        template_file = "template.html"
-        with open(template_file, "r", encoding="utf-8") as f:
-            template_html = f.read()
+        for idx, key in enumerate(self.placeholders):
+            tk.Label(root, text=key).grid(row=idx, column=0, sticky=tk.W, padx=5, pady=2)
+            entry = tk.Entry(root, width=60)
+            entry.grid(row=idx, column=1, padx=5, pady=2)
+            self.entries[key] = entry
 
-        # Get replacement values from GUI
-        for label, placeholder in REPLACEMENTS:
-            widget = entries[label]
-            value = widget.get() if isinstance(widget, tk.Entry) else widget.get("1.0", tk.END).strip()
-            template_html = template_html.replace(placeholder, value)
+        tk.Button(root, text="Select 2nd HTML File", command=self.load_second_html).grid(row=len(self.placeholders), column=0, pady=10)
+        tk.Button(root, text="Generate HTML", command=self.generate_html).grid(row=len(self.placeholders), column=1, pady=10)
 
-        # Ask user for second HTML file
-        second_file_path = filedialog.askopenfilename(
-            title="Select the 2nd HTML file",
-            filetypes=[("HTML files", "*.html"), ("All files", "*.*")]
-        )
-        if not second_file_path:
-            messagebox.showwarning("キャンセル", "2つ目のHTMLファイルが選択されていません。")
+        self.second_html_path = None
+
+    def load_second_html(self):
+        self.second_html_path = filedialog.askopenfilename(title="Select second HTML file", filetypes=[("HTML files", "*.html")])
+        if self.second_html_path:
+            messagebox.showinfo("File Selected", f"Loaded: {os.path.basename(self.second_html_path)}")
+
+    def generate_html(self):
+        if not self.second_html_path:
+            messagebox.showerror("Error", "You must select the 2nd HTML file.")
             return
 
-        with open(second_file_path, "r", encoding="utf-8") as f:
-            second_html = f.read()
+        with open("template.html", "r", encoding="utf-8") as f:
+            template_soup = BeautifulSoup(f, "html.parser")
 
-        second_soup = BeautifulSoup(second_html, "html.parser")
-        new_body_content = "".join(str(tag) for tag in second_soup.body.contents if tag.name != "script")
-        new_script_tags = second_soup.find_all("script")
+        with open(self.second_html_path, "r", encoding="utf-8", errors="ignore") as f:
+            second_soup = BeautifulSoup(f, "html.parser")
 
-        # Replace the entire <section id="userSurvey-content">...</section>
-        template_soup = BeautifulSoup(template_html, "html.parser")
-        old_section = template_soup.find("section", id="userSurvey-content")
-        if old_section:
-            new_section = BeautifulSoup(new_body_content, "html.parser")
-            old_section.replace_with(new_section)
+        for script_tag in second_soup.find_all("script"):
+            template_soup.head.append(script_tag)
 
-        # Append script tags to body
-        for script in new_script_tags:
-            template_soup.body.append(script)
+        html_str = str(template_soup)
+        for key, entry in self.entries.items():
+            html_str = html_str.replace(f"【REPLACE: {key}】", entry.get())
+        template_soup = BeautifulSoup(html_str, "html.parser")
 
-        # Save with timestamp
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_file = f"output_{timestamp}.html"
+        second_radios = second_soup.find_all("input", {"type": "radio"})
+        second_labels = second_soup.find_all("label")
+        form = template_soup.find("form", {"class": "userSurvey__form"})
+
+        template_radios = form.find_all("input", {"type": "radio"})
+        template_labels = form.find_all("label", {"class": "userSurvey__form-list-label01"})
+
+        for new_input, new_label, old_input, old_label in zip(second_radios, second_labels, template_radios, template_labels):
+            old_input["id"] = new_input.get("id", "")
+            old_input["name"] = new_input.get("name", "")
+            old_input["value"] = new_input.get("value", "")
+            old_label["for"] = new_input.get("id", "")
+            old_label.string = new_label.text.strip()
+
+        now = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_file = f"output_{now}.html"
         with open(output_file, "w", encoding="utf-8") as f:
-            f.write(str(template_soup))
+            f.write(str(template_soup.prettify()))
 
-        messagebox.showinfo("成功", f"{output_file} を生成しました。")
+        messagebox.showinfo("Success", f"Generated: {output_file}")
 
-    except Exception as e:
-        messagebox.showerror("エラー", str(e))
-
-# GUI setup
-root = tk.Tk()
-root.title("HTMLテンプレート生成ツール")
-
-canvas = tk.Canvas(root)
-scrollbar = tk.Scrollbar(root, orient="vertical", command=canvas.yview)
-frame = tk.Frame(canvas)
-canvas.configure(yscrollcommand=scrollbar.set)
-
-scrollbar.pack(side="right", fill="y")
-canvas.pack(side="left", fill="both", expand=True)
-canvas.create_window((0, 0), window=frame, anchor="nw")
-
-def on_frame_configure(event):
-    canvas.configure(scrollregion=canvas.bbox("all"))
-frame.bind("<Configure>", on_frame_configure)
-
-# Create input fields
-for label, _ in REPLACEMENTS:
-    tk.Label(frame, text=label, font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=(10, 0))
-    if "Description" in label or "Question" in label or "Head Line" in label:
-        widget = tk.Text(frame, height=3, width=70)
-    else:
-        widget = tk.Entry(frame, width=70)
-    widget.pack(padx=10)
-    entries[label] = widget
-
-# Button to generate
-tk.Button(frame, text="生成 (Generate HTML)", command=generate_html, bg="lightblue").pack(pady=20)
-
-root.mainloop()
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = HTMLGeneratorApp(root)
+    root.mainloop()
