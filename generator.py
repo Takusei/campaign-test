@@ -53,10 +53,11 @@ class HTMLGeneratorApp:
             html_str = html_str.replace(f"【REPLACE: {key}】", entry.get())
         template_soup = BeautifulSoup(html_str, "html.parser")
 
-        second_radios = second_soup.find_all("input", {"type": "radio"})
-        second_labels = second_soup.find_all("label")
         form = template_soup.find("form", {"class": "userSurvey__form"})
 
+        # Update radio buttons and labels
+        second_radios = second_soup.find_all("input", {"type": "radio"})
+        second_labels = second_soup.find_all("label")
         template_radios = form.find_all("input", {"type": "radio"})
         template_labels = form.find_all("label", {"class": "userSurvey__form-list-label01"})
 
@@ -66,6 +67,12 @@ class HTMLGeneratorApp:
             old_input["value"] = new_input.get("value", "")
             old_label["for"] = new_input.get("id", "")
             old_label.string = new_label.text.strip()
+
+        # Update the textarea with input from second.html (Q2)
+        second_input_text = second_soup.find("input", {"type": "text", "name": True})
+        template_textarea = form.find("textarea", {"name": "answers[QUESTION_2_ID]"})
+        if second_input_text and template_textarea:
+            template_textarea["name"] = second_input_text["name"]
 
         now = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         output_file = f"output_{now}.html"
