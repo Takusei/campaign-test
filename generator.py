@@ -7,43 +7,58 @@ import os
 class HTMLGeneratorApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("HTML Generator")
+        self.root.title("HTMLフォーム生成ツール")
         self.entries = {}
 
         self.placeholders = [
-            "Page Title", "Canonical URL", "Meta Description", "OG Description",
-            "Head Line1", "Head Line2", "Head Line3",
-            "Deadline year", "Deadline month", "Deadline day", "Deadline weekday",
-            "Deliver date", "Extract year", "Extract month", "Extract day", "Extract weekday"
+            ("ページタイトル", "Page Title"),
+            ("カノニカルURL", "Canonical URL"),
+            ("メタディスクリプション", "Meta Description"),
+            ("OGディスクリプション", "OG Description"),
+            ("ヘッドライン1", "Head Line1"),
+            ("ヘッドライン2", "Head Line2"),
+            ("ヘッドライン3", "Head Line3"),
+            ("締切年", "Deadline year"),
+            ("締切月", "Deadline month"),
+            ("締切日", "Deadline day"),
+            ("締切曜日", "Deadline weekday"),
+            ("発送予定日", "Deliver date"),
+            ("抽出年", "Extract year"),
+            ("抽出月", "Extract month"),
+            ("抽出日", "Extract day"),
+            ("抽出曜日", "Extract weekday")
         ]
 
-        def limit_length(P):
-            return len(P) <= 20
+        self.headline_limit = len("描き下ろしイラスト使用アクリルスタンドが")
 
-        vcmd = (root.register(limit_length), '%P')
-
-        for idx, key in enumerate(self.placeholders):
-            tk.Label(root, text=key).grid(row=idx, column=0, sticky=tk.W, padx=5, pady=2)
-            if key.startswith("Head Line"):
-                entry = tk.Entry(root, width=60, validate="key", validatecommand=vcmd)
-            else:
-                entry = tk.Entry(root, width=60)
+        for idx, (jp_label, key) in enumerate(self.placeholders):
+            tk.Label(root, text=jp_label).grid(row=idx, column=0, sticky=tk.W, padx=5, pady=2)
+            entry = tk.Entry(root, width=60)
             entry.grid(row=idx, column=1, padx=5, pady=2)
             self.entries[key] = entry
+            if "Head Line" in key:
+                entry.bind("<KeyRelease>", lambda e, k=key: self.enforce_length(e, k))
 
-        tk.Button(root, text="Select 2nd HTML File", command=self.load_second_html).grid(row=len(self.placeholders), column=0, pady=10)
-        tk.Button(root, text="Generate HTML", command=self.generate_html).grid(row=len(self.placeholders), column=1, pady=10)
+        tk.Button(root, text="第2HTMLファイルを選択", command=self.load_second_html).grid(row=len(self.placeholders), column=0, pady=10)
+        tk.Button(root, text="HTML生成", command=self.generate_html).grid(row=len(self.placeholders), column=1, pady=10)
 
         self.second_html_path = None
 
+    def enforce_length(self, event, key):
+        entry = self.entries[key]
+        value = entry.get()
+        if len(value) > self.headline_limit:
+            entry.delete(self.headline_limit, tk.END)
+            messagebox.showwarning("制限超過", f"{key} は最大 {self.headline_limit} 文字までです。")
+
     def load_second_html(self):
-        self.second_html_path = filedialog.askopenfilename(title="Select second HTML file", filetypes=[("HTML files", "*.html")])
+        self.second_html_path = filedialog.askopenfilename(title="第2HTMLファイルを選択", filetypes=[("HTML files", "*.html")])
         if self.second_html_path:
-            messagebox.showinfo("File Selected", f"Loaded: {os.path.basename(self.second_html_path)}")
+            messagebox.showinfo("ファイル選択", f"{os.path.basename(self.second_html_path)} を読み込みました。")
 
     def generate_html(self):
         if not self.second_html_path:
-            messagebox.showerror("Error", "You must select the 2nd HTML file.")
+            messagebox.showerror("エラー", "第2HTMLファイルを選択してください。")
             return
 
         with open("template.html", "r", encoding="utf-8") as f:
@@ -52,32 +67,32 @@ class HTMLGeneratorApp:
         with open(self.second_html_path, "r", encoding="utf-8", errors="ignore") as f:
             second_soup = BeautifulSoup(f, "html.parser")
 
-        # Insert <script> from second HTML
+        # Insert script tags from second HTML
         for script_tag in second_soup.find_all("script"):
             template_soup.head.append(script_tag)
 
-        # Replace placeholders
+        # Replace placeholders in template
         html_str = str(template_soup)
-        for key, entry in self.entries.items():
-            html_str = html_str.replace(f"【REPLACE: {key}】", entry.get())
+        for jp_label, key in self.placeholders:
+            html_str = html_str.replace(f"【REPLACE: {key}】", self.entries[key].get())
         template_soup = BeautifulSoup(html_str, "html.parser")
 
-        # Replace form action, name, onSubmit
-        src_form = second_soup.find("form")
-        target_form = template_soup.find("form")
-        if src_form and target_form:
-            if src_form.get("action"):
-                target_form["action"] = src_form["action"]
-            if src_form.get("name"):
-                target_form["name"] = src_form["name"]
-            if src_form.get("onsubmit"):
-                target_form["onsubmit"] = src_form["onsubmit"]
+        # Update form attributes (action and name)
+        form_in_template = template_soup.find("form", {"class": "userSurvey__form"})
+        form_in_second = second_soup.find("form")
+        if form_in_template and form_in_second:
+            if form_in_second.has_attr("action"):
+                form_in_template["action"] = form_in_second["action"]
+            if form_in_second.has_attr("name"):
+                form_in_template["name"] = form_in_second["name"]
+            if form_in_second.has_attr("onsubmit"):
+                form_in_template["onsubmit"] = form_in_second["onsubmit"]
 
         # Replace radio inputs and labels
         second_radios = second_soup.find_all("input", {"type": "radio"})
         second_labels = second_soup.find_all("label")
-        template_radios = target_form.find_all("input", {"type": "radio"})
-        template_labels = target_form.find_all("label", {"class": "userSurvey__form-list-label01"})
+        template_radios = form_in_template.find_all("input", {"type": "radio"})
+        template_labels = form_in_template.find_all("label", {"class": "userSurvey__form-list-label01"})
 
         for new_input, new_label, old_input, old_label in zip(second_radios, second_labels, template_radios, template_labels):
             old_input["id"] = new_input.get("id", "")
@@ -86,18 +101,19 @@ class HTMLGeneratorApp:
             old_label["for"] = new_input.get("id", "")
             old_label.string = new_label.get_text(strip=True)
 
-        # Replace textarea attributes with <input type=text> from second.html, but keep tag as <textarea>
-        second_text_input = second_soup.find("input", {"type": "text"})
-        textarea = target_form.find("textarea")
-        if second_text_input and textarea:
-            textarea["name"] = second_text_input.get("name", "")
+        # Replace textarea field with input type="text" from second HTML
+        template_textarea = form_in_template.find("textarea", {"name": "answers[QUESTION_2_ID]"})
+        second_input = second_soup.find("input", {"type": "text", "name": True})
+        if template_textarea and second_input:
+            template_textarea["name"] = second_input["name"]
 
+        # Write to output HTML
         now = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         output_file = f"output_{now}.html"
         with open(output_file, "w", encoding="utf-8") as f:
-            f.write(str(template_soup.prettify()))
+            f.write(template_soup.prettify())
 
-        messagebox.showinfo("Success", f"Generated: {output_file}")
+        messagebox.showinfo("成功", f"{output_file} を生成しました。")
 
 if __name__ == "__main__":
     root = tk.Tk()
