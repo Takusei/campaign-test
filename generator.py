@@ -44,27 +44,30 @@ class HTMLGeneratorApp:
         with open(self.second_html_path, "r", encoding="utf-8", errors="ignore") as f:
             second_soup = BeautifulSoup(f, "html.parser")
 
-        # Insert JS from 2nd HTML into head
+        # Insert JS <script> tags
         for script_tag in second_soup.find_all("script"):
             template_soup.head.append(script_tag)
 
-        # Replace form action/name
-        second_form = second_soup.find("form")
-        form_action = second_form.get("action", "") if second_form else ""
-        form_name = second_form.get("name", "") if second_form else ""
-
+        # Replace placeholders
         html_str = str(template_soup)
         for key, entry in self.entries.items():
             html_str = html_str.replace(f"【REPLACE: {key}】", entry.get())
-        html_str = html_str.replace("form[ACTION]", form_action).replace("form[NAME]", form_name)
         template_soup = BeautifulSoup(html_str, "html.parser")
 
         form = template_soup.find("form", {"class": "userSurvey__form"})
+        second_form = second_soup.find("form")
+        if form and second_form:
+            # Update form action/name/onsubmit
+            if second_form.get("action"):
+                form["action"] = second_form["action"]
+            if second_form.get("name"):
+                form["name"] = second_form["name"]
+            if second_form.get("onSubmit"):
+                form["onSubmit"] = second_form["onSubmit"]
 
-        # Replace radio button info (keep template style)
+        # Update radios
         second_radios = second_soup.find_all("input", {"type": "radio"})
         second_labels = second_soup.find_all("label")
-
         template_radios = form.find_all("input", {"type": "radio"})
         template_labels = form.find_all("label", {"class": "userSurvey__form-list-label01"})
 
@@ -75,13 +78,13 @@ class HTMLGeneratorApp:
             old_label["for"] = new_input.get("id", "")
             old_label.string = new_label.text.strip()
 
-        # Replace textarea "name" using <input type="text"> from 2nd HTML
-        second_text_input = second_soup.find("input", {"type": "text"})
-        if second_text_input:
-            textarea = form.find("textarea", {"class": "big"})
-            if textarea:
-                textarea["name"] = second_text_input.get("name", "")
+        # Update textarea name
+        second_input_text = second_soup.find("input", {"type": "text", "name": True})
+        template_textarea = form.find("textarea", {"name": "answers[QUESTION_2_ID]"})
+        if second_input_text and template_textarea:
+            template_textarea["name"] = second_input_text["name"]
 
+        # Save
         now = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         output_file = f"output_{now}.html"
         with open(output_file, "w", encoding="utf-8") as f:
@@ -89,7 +92,6 @@ class HTMLGeneratorApp:
 
         messagebox.showinfo("Success", f"Generated: {output_file}")
 
-# Run the GUI
 if __name__ == "__main__":
     root = tk.Tk()
     app = HTMLGeneratorApp(root)
