@@ -3,6 +3,12 @@ from tkinter import filedialog, messagebox
 from bs4 import BeautifulSoup
 import datetime
 import os
+import chardet
+
+def detect_encoding(filepath):
+    with open(filepath, 'rb') as f:
+        result = chardet.detect(f.read())
+    return result['encoding']
 
 class HTMLGeneratorApp:
     def __init__(self, root):
@@ -64,7 +70,8 @@ class HTMLGeneratorApp:
         with open("template.html", "r", encoding="utf-8") as f:
             template_soup = BeautifulSoup(f, "html.parser")
 
-        with open(self.second_html_path, "r", encoding="utf-8", errors="ignore") as f:
+        encoding = detect_encoding(self.second_html_path)
+        with open(self.second_html_path, "r", encoding=encoding, errors="ignore") as f:
             second_soup = BeautifulSoup(f, "html.parser")
 
         # Insert script tags from second HTML
